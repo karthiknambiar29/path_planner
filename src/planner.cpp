@@ -1,5 +1,9 @@
 #include "planner.h"
 
+#include <algorithm>
+#include <limits>
+#include <new>
+
 using namespace HybridAStar;
 //###################################################
 //                                        CONSTRUCTOR
@@ -18,10 +22,12 @@ Planner::Planner() {
 
   // ___________________
   // TOPICS TO SUBSCRIBE
-  if (Constants::manual) {
-    subMap = n.subscribe("/map", 1, &Planner::setMap, this);
-  } else {
-    subMap = n.subscribe("/occ_map", 1, &Planner::setMap, this);
+  const std::string mapTopic = "/occupancy_grid_node/occupancy_grid_downsampled";
+  subMap = n.subscribe(mapTopic, 1, &Planner::setMap, this);
+
+  n.param("map_downsample_factor", mapDownsampleFactor, 1);
+  if (mapDownsampleFactor < 1) {
+    mapDownsampleFactor = 1;
   }
 
   subGoal = n.subscribe("/move_base_simple/goal", 1, &Planner::setGoal, this);
@@ -42,18 +48,99 @@ void Planner::initializeLookups() {
 //###################################################
 //                                                MAP
 //###################################################
+nav_msgs::OccupancyGrid::Ptr Planner::downsampleGrid(const nav_msgs::OccupancyGrid::Ptr& map, int factor) {
+  if (factor <= 1) {
+    return map;
+  }
+
+  nav_msgs::OccupancyGrid::Ptr downsampled(new nav_msgs::OccupancyGrid());
+  downsampled->header = map->header;
+  downsampled->info = map->info;
+  downsampled->info.resolution = map->info.resolution * factor;
+  downsampled->info.width = (map->info.width + factor - 1) / factor;
+  downsampled->info.height = (map->info.height + factor - 1) / factor;
+  downsampled->data.assign(downsampled->info.width * downsampled->info.height, 0);
+
+  const int srcWidth = static_cast<int>(map->info.width);
+  const int srcHeight = static_cast<int>(map->info.height);
+  const int dstWidth = static_cast<int>(downsampled->info.width);
+  const int dstHeight = static_cast<int>(downsampled->info.height);
+
+  for (int y = 0; y < dstHeight; ++y) {
+    const int y0 = y * factor;
+    const int y1 = std::min(y0 + factor, srcHeight);
+    for (int x = 0; x < dstWidth; ++x) {
+      const int x0 = x * factor;
+      const int x1 = std::min(x0 + factor, srcWidth);
+      bool occupied = false;
+      for (int yy = y0; yy < y1 && !occupied; ++yy) {
+        const int row = yy * srcWidth;
+        for (int xx = x0; xx < x1; ++xx) {
+          const int8_t cell = map->data[row + xx];
+          if (cell > 0) {
+            occupied = true;
+            break;
+          }
+        }
+      }
+      downsampled->data[y * dstWidth + x] = occupied ? 100 : 0;
+    }
+  }
+
+  return downsampled;
+}
+
+void Planner::worldToGrid(double wx, double wy, float& gx, float& gy) const {
+  gx = static_cast<float>((wx - mapOriginX) / mapResolution);
+  gy = static_cast<float>((wy - mapOriginY) / mapResolution);
+}
+
+void Planner::updateStartFromOdom() {
+  if (!listener.canTransform("/odom", ros::Time(0), "/base_link", ros::Time(0), "/odom", nullptr)) {
+    validStart = false;
+    return;
+  }
+
+  listener.lookupTransform("/odom", "/base_link", ros::Time(0), transform);
+  start.pose.pose.position.x = transform.getOrigin().x();
+  start.pose.pose.position.y = transform.getOrigin().y();
+  tf::quaternionTFToMsg(transform.getRotation(), start.pose.pose.orientation);
+
+  float gridX = 0.0f;
+  float gridY = 0.0f;
+  worldToGrid(start.pose.pose.position.x, start.pose.pose.position.y, gridX, gridY);
+  validStart = (grid->info.height >= gridY && gridY >= 0 && grid->info.width >= gridX && gridX >= 0);
+
+  if (validStart) {
+    geometry_msgs::PoseStamped startN;
+    startN.pose.position = start.pose.pose.position;
+    startN.pose.orientation = start.pose.pose.orientation;
+    startN.header.frame_id = "odom";
+    startN.header.stamp = ros::Time::now();
+    pubStart.publish(startN);
+  }
+}
+
 void Planner::setMap(const nav_msgs::OccupancyGrid::Ptr map) {
   if (Constants::coutDEBUG) {
     std::cout << "I am seeing the map..." << std::endl;
   }
 
-  grid = map;
+  grid = map; // downsampleGrid(map, mapDownsampleFactor);
+  mapResolution = grid->info.resolution;
+  mapOriginX = grid->info.origin.position.x;
+  mapOriginY = grid->info.origin.position.y;
+  path.setMapResolution(mapResolution);
+  path.setMapOrigin(mapOriginX, mapOriginY);
+  smoothedPath.setMapResolution(mapResolution);
+  smoothedPath.setMapOrigin(mapOriginX, mapOriginY);
+  visualization.setMapResolution(mapResolution);
   //update the configuration space with the current map
-  configurationSpace.updateGrid(map);
+  configurationSpace.updateGrid(grid);
   //create array for Voronoi diagram
 //  ros::Time t0 = ros::Time::now();
-  int height = map->info.height;
-  int width = map->info.width;
+  int height = grid->info.height;
+  int width = grid->info.width;
   bool** binMap;
   binMap = new bool*[width];
 
@@ -61,7 +148,8 @@ void Planner::setMap(const nav_msgs::OccupancyGrid::Ptr map) {
 
   for (int x = 0; x < width; ++x) {
     for (int y = 0; y < height; ++y) {
-      binMap[x][y] = map->data[y * width + x] ? true : false;
+      const int8_t cell = grid->data[y * width + x];
+      binMap[x][y] = (cell > 0);
     }
   }
 
@@ -72,24 +160,8 @@ void Planner::setMap(const nav_msgs::OccupancyGrid::Ptr map) {
 //  ros::Duration d(t1 - t0);
 //  std::cout << "created Voronoi Diagram in ms: " << d * 1000 << std::endl;
 
-  // plan if the switch is not set to manual and a transform is available
-  if (!Constants::manual && listener.canTransform("/map", ros::Time(0), "/base_link", ros::Time(0), "/map", nullptr)) {
-
-    listener.lookupTransform("/map", "/base_link", ros::Time(0), transform);
-
-    // assign the values to start from base_link
-    start.pose.pose.position.x = transform.getOrigin().x();
-    start.pose.pose.position.y = transform.getOrigin().y();
-    tf::quaternionTFToMsg(transform.getRotation(), start.pose.pose.orientation);
-
-    if (grid->info.height >= start.pose.pose.position.y && start.pose.pose.position.y >= 0 &&
-        grid->info.width >= start.pose.pose.position.x && start.pose.pose.position.x >= 0) {
-      // set the start as valid and plan
-      validStart = true;
-    } else  {
-      validStart = false;
-    }
-
+  updateStartFromOdom();
+  if (validStart && validGoal) {
     plan();
   }
 }
@@ -98,29 +170,8 @@ void Planner::setMap(const nav_msgs::OccupancyGrid::Ptr map) {
 //                                   INITIALIZE START
 //###################################################
 void Planner::setStart(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& initial) {
-  float x = initial->pose.pose.position.x / Constants::cellSize;
-  float y = initial->pose.pose.position.y / Constants::cellSize;
-  float t = tf::getYaw(initial->pose.pose.orientation);
-  // publish the start without covariance for rviz
-  geometry_msgs::PoseStamped startN;
-  startN.pose.position = initial->pose.pose.position;
-  startN.pose.orientation = initial->pose.pose.orientation;
-  startN.header.frame_id = "map";
-  startN.header.stamp = ros::Time::now();
-
-  std::cout << "I am seeing a new start x:" << x << " y:" << y << " t:" << Helper::toDeg(t) << std::endl;
-
-  if (grid->info.height >= y && y >= 0 && grid->info.width >= x && x >= 0) {
-    validStart = true;
-    start = *initial;
-
-    if (Constants::manual) { plan();}
-
-    // publish start for RViz
-    pubStart.publish(startN);
-  } else {
-    std::cout << "invalid start x:" << x << " y:" << y << " t:" << Helper::toDeg(t) << std::endl;
-  }
+  (void)initial;
+  updateStartFromOdom();
 }
 
 //###################################################
@@ -128,8 +179,9 @@ void Planner::setStart(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr&
 //###################################################
 void Planner::setGoal(const geometry_msgs::PoseStamped::ConstPtr& end) {
   // retrieving goal position
-  float x = end->pose.position.x / Constants::cellSize;
-  float y = end->pose.position.y / Constants::cellSize;
+  float x = 0.0f;
+  float y = 0.0f;
+  worldToGrid(end->pose.position.x, end->pose.position.y, x, y);
   float t = tf::getYaw(end->pose.orientation);
 
   std::cout << "I am seeing a new goal x:" << x << " y:" << y << " t:" << Helper::toDeg(t) << std::endl;
@@ -154,18 +206,50 @@ void Planner::plan() {
 
     // ___________________________
     // LISTS ALLOWCATED ROW MAJOR ORDER
-    int width = grid->info.width;
-    int height = grid->info.height;
-    int depth = Constants::headings;
-    int length = width * height * depth;
+    const int width = grid->info.width;
+    const int height = grid->info.height;
+    const int depth = Constants::headings;
+    if (width <= 0 || height <= 0) {
+      std::cout << "invalid map size, width: " << width << " height: " << height << std::endl;
+      return;
+    }
+
+    const size_t widthSz = static_cast<size_t>(width);
+    const size_t heightSz = static_cast<size_t>(height);
+    const size_t depthSz = static_cast<size_t>(depth);
+    if (widthSz > std::numeric_limits<size_t>::max() / heightSz ||
+        (widthSz * heightSz) > std::numeric_limits<size_t>::max() / depthSz) {
+      std::cout << "map size overflows allocation, width: " << width << " height: " << height
+                << " headings: " << depth << std::endl;
+      return;
+    }
+
+    const size_t nodes2DCount = widthSz * heightSz;
+    const size_t nodes3DCount = nodes2DCount * depthSz;
+    if (nodes3DCount > static_cast<size_t>(std::numeric_limits<int>::max())) {
+      std::cout << "map too large for int indices, width: " << width << " height: " << height
+                << " headings: " << depth << std::endl;
+      return;
+    }
     // define list pointers and initialize lists
-    Node3D* nodes3D = new Node3D[length]();
-    Node2D* nodes2D = new Node2D[width * height]();
+    Node3D* nodes3D = new (std::nothrow) Node3D[nodes3DCount]();
+    Node2D* nodes2D = new (std::nothrow) Node2D[nodes2DCount]();
+    if (nodes3D == nullptr || nodes2D == nullptr) {
+      const double mega = 1024.0 * 1024.0;
+      const double bytes3D = static_cast<double>(nodes3DCount * sizeof(Node3D));
+      const double bytes2D = static_cast<double>(nodes2DCount * sizeof(Node2D));
+      std::cout << "failed to allocate planning grids (nodes3D: " << (bytes3D / mega)
+                << " MB, nodes2D: " << (bytes2D / mega) << " MB)" << std::endl;
+      delete [] nodes3D;
+      delete [] nodes2D;
+      return;
+    }
 
     // ________________________
     // retrieving goal position
-    float x = goal.pose.position.x / Constants::cellSize;
-    float y = goal.pose.position.y / Constants::cellSize;
+    float x = 0.0f;
+    float y = 0.0f;
+    worldToGrid(goal.pose.position.x, goal.pose.position.y, x, y);
     float t = tf::getYaw(goal.pose.orientation);
     // set theta to a value (0,2PI]
     t = Helper::normalizeHeadingRad(t);
@@ -177,8 +261,7 @@ void Planner::plan() {
 
     // _________________________
     // retrieving start position
-    x = start.pose.pose.position.x / Constants::cellSize;
-    y = start.pose.pose.position.y / Constants::cellSize;
+    worldToGrid(start.pose.pose.position.x, start.pose.pose.position.y, x, y);
     t = tf::getYaw(start.pose.pose.orientation);
     // set theta to a value (0,2PI]
     t = Helper::normalizeHeadingRad(t);

@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
   ros::NodeHandle n;
 
   // subscribe to map updates
-  ros::Subscriber sub_map = n.subscribe("/occ_map", 1, setMap);
+  ros::Subscriber sub_map = n.subscribe("/traversability_global_map_visualization/costmap_map", 1, setMap);
   tf::Pose tfPose;
 
 
@@ -34,17 +34,12 @@ int main(int argc, char** argv) {
       tf::poseMsgToTF(grid->info.origin, tfPose);
     }
 
-    // odom to map
+    // odom to path
     broadcaster.sendTransform(
       tf::StampedTransform(
         tf::Transform(tf::Quaternion(0, 0, 0, 1), tfPose.getOrigin()),
-        ros::Time::now(), "odom", "map"));
+        ros::Time::now(), "odom", "odom"));
 
-    // map to path
-    broadcaster.sendTransform(
-      tf::StampedTransform(
-        tf::Transform(tf::Quaternion(0, 0, 0, 1), tf::Vector3(0, 0, 0)),
-        ros::Time::now(), "map", "path"));
     ros::spinOnce();
     r.sleep();
   }

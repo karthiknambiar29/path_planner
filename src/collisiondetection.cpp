@@ -25,7 +25,7 @@ bool CollisionDetection::configurationTest(float x, float y, float t) const {
 
     // make sure the configuration coordinates are actually on the grid
     if (cX >= 0 && (unsigned int)cX < grid->info.width && cY >= 0 && (unsigned int)cY < grid->info.height) {
-      if (grid->data[cY * grid->info.width + cX]) {
+      if (grid->data[cY * grid->info.width + cX] > 0) {
         return false;
       }
     }

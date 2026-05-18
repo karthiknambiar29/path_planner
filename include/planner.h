@@ -62,6 +62,15 @@ class Planner {
   */
   void plan();
 
+   /// Downsample the input occupancy grid for planning
+   nav_msgs::OccupancyGrid::Ptr downsampleGrid(const nav_msgs::OccupancyGrid::Ptr& map, int factor);
+
+   /// Convert world coordinates to grid coordinates
+   void worldToGrid(double wx, double wy, float& gx, float& gy) const;
+
+   /// Update start pose from odom -> base_link
+   void updateStartFromOdom();
+
  private:
   /// The node handle
   ros::NodeHandle n;
@@ -91,6 +100,13 @@ class Planner {
   DynamicVoronoi voronoiDiagram;
   /// A pointer to the grid the planner runs on
   nav_msgs::OccupancyGrid::Ptr grid;
+   /// Map resolution used to scale between world and grid coordinates
+   float mapResolution = Constants::cellSize;
+   /// Map origin in world coordinates
+   double mapOriginX = 0.0;
+   double mapOriginY = 0.0;
+   /// Map downsampling factor (1 = no downsampling)
+   int mapDownsampleFactor = 1;
   /// The start pose set through RViz
   geometry_msgs::PoseWithCovarianceStamped start;
   /// The goal pose set through RViz

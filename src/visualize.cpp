@@ -12,7 +12,7 @@ void Visualize::clear() {
   visualization_msgs::MarkerArray costCubes3D;
   visualization_msgs::Marker costCube3D;
   // CLEAR THE COST HEATMAP
-  costCube3D.header.frame_id = "path";
+  costCube3D.header.frame_id = "odom";
   costCube3D.header.stamp = ros::Time::now();
   costCube3D.id = 0;
   costCube3D.action = 3;
@@ -23,7 +23,7 @@ void Visualize::clear() {
   visualization_msgs::MarkerArray costCubes2D;
   visualization_msgs::Marker costCube2D;
   // CLEAR THE COST HEATMAP
-  costCube2D.header.frame_id = "path";
+  costCube2D.header.frame_id = "odom";
   costCube2D.header.stamp = ros::Time::now();
   costCube2D.id = 0;
   costCube2D.action = 3;
@@ -36,11 +36,11 @@ void Visualize::clear() {
 //###################################################
 void Visualize::publishNode3DPose(Node3D& node) {
   geometry_msgs::PoseStamped pose;
-  pose.header.frame_id = "path";
+  pose.header.frame_id = "odom";
   pose.header.stamp = ros::Time::now();
   pose.header.seq = 0;
-  pose.pose.position.x = node.getX() * Constants::cellSize;
-  pose.pose.position.y = node.getY() * Constants::cellSize;
+  pose.pose.position.x = node.getX() * mapResolution;
+  pose.pose.position.y = node.getY() * mapResolution;
 
   //FORWARD
   if (node.getPrim() < 3) {
@@ -60,8 +60,8 @@ void Visualize::publishNode3DPose(Node3D& node) {
 //###################################################
 void Visualize::publishNode3DPoses(Node3D& node) {
   geometry_msgs::Pose pose;
-  pose.position.x = node.getX() * Constants::cellSize;
-  pose.position.y = node.getY() * Constants::cellSize;
+  pose.position.x = node.getX() * mapResolution;
+  pose.position.y = node.getY() * mapResolution;
 
   //FORWARD
   if (node.getPrim() < 3) {
@@ -87,11 +87,11 @@ void Visualize::publishNode3DPoses(Node3D& node) {
 //###################################################
 void Visualize::publishNode2DPose(Node2D& node) {
   geometry_msgs::PoseStamped pose;
-  pose.header.frame_id = "path";
+  pose.header.frame_id = "odom";
   pose.header.stamp = ros::Time::now();
   pose.header.seq = 0;
-  pose.pose.position.x = (node.getX() + 0.5) * Constants::cellSize;
-  pose.pose.position.y = (node.getY() + 0.5) * Constants::cellSize;
+  pose.pose.position.x = (node.getX() + 0.5) * mapResolution;
+  pose.pose.position.y = (node.getY() + 0.5) * mapResolution;
   pose.pose.orientation = tf::createQuaternionMsgFromYaw(0);
 
   // PUBLISH THE POSE
@@ -104,8 +104,8 @@ void Visualize::publishNode2DPose(Node2D& node) {
 void Visualize::publishNode2DPoses(Node2D& node) {
   if (node.isDiscovered()) {
     geometry_msgs::Pose pose;
-    pose.position.x = (node.getX() + 0.5) * Constants::cellSize;
-    pose.position.y = (node.getY() + 0.5) * Constants::cellSize;
+    pose.position.x = (node.getX() + 0.5) * mapResolution;
+    pose.position.y = (node.getY() + 0.5) * mapResolution;
     pose.orientation = tf::createQuaternionMsgFromYaw(0);
 
     poses2D.poses.push_back(pose);
@@ -179,13 +179,13 @@ void Visualize::publishNode3DCosts(Node3D* nodes, int width, int height, int dep
       }
 
 
-      costCube.header.frame_id = "path";
+      costCube.header.frame_id = "odom";
       costCube.header.stamp = ros::Time::now();
       costCube.id = i;
       costCube.type = visualization_msgs::Marker::CUBE;
       values[i] = (values[i] - min) / (max - min);
-      costCube.scale.x = Constants::cellSize;
-      costCube.scale.y = Constants::cellSize;
+      costCube.scale.x = mapResolution;
+      costCube.scale.y = mapResolution;
       costCube.scale.z = 0.1;
       costCube.color.a = 0.5;
       heatMapGradient.getColorAtValue(values[i], red, green, blue);
@@ -193,8 +193,8 @@ void Visualize::publishNode3DCosts(Node3D* nodes, int width, int height, int dep
       costCube.color.g = green;
       costCube.color.b = blue;
       // center in cell +0.5
-      costCube.pose.position.x = (i % width + 0.5) * Constants::cellSize;
-      costCube.pose.position.y = ((i / width) % height + 0.5) * Constants::cellSize;
+      costCube.pose.position.x = (i % width + 0.5) * mapResolution;
+      costCube.pose.position.y = ((i / width) % height + 0.5) * mapResolution;
       costCubes.markers.push_back(costCube);
     }
   }
@@ -261,13 +261,13 @@ void Visualize::publishNode2DCosts(Node2D* nodes, int width, int height) {
       }
 
 
-      costCube.header.frame_id = "path";
+      costCube.header.frame_id = "odom";
       costCube.header.stamp = ros::Time::now();
       costCube.id = i;
       costCube.type = visualization_msgs::Marker::CUBE;
       values[i] = (values[i] - min) / (max - min);
-      costCube.scale.x = Constants::cellSize;
-      costCube.scale.y = Constants::cellSize;
+      costCube.scale.x = mapResolution;
+      costCube.scale.y = mapResolution;
       costCube.scale.z = 0.1;
       costCube.color.a = 0.5;
       heatMapGradient.getColorAtValue(values[i], red, green, blue);
@@ -275,8 +275,8 @@ void Visualize::publishNode2DCosts(Node2D* nodes, int width, int height) {
       costCube.color.g = green;
       costCube.color.b = blue;
       // center in cell +0.5
-      costCube.pose.position.x = (i % width + 0.5) * Constants::cellSize;
-      costCube.pose.position.y = ((i / width) % height + 0.5) * Constants::cellSize;
+      costCube.pose.position.x = (i % width + 0.5) * mapResolution;
+      costCube.pose.position.y = ((i / width) % height + 0.5) * mapResolution;
       costCubes.markers.push_back(costCube);
     }
   }

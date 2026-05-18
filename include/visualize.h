@@ -37,9 +37,9 @@ class Visualize {
     pubNodes2DCosts = n.advertise<visualization_msgs::MarkerArray>("/visualizeNodes2DCosts", 100);
 
     // CONFIGURE THE CONTAINER
-    poses3D.header.frame_id = "path";
-    poses3Dreverse.header.frame_id = "path";
-    poses2D.header.frame_id = "path";
+    poses3D.header.frame_id = "odom";
+    poses3Dreverse.header.frame_id = "odom";
+    poses2D.header.frame_id = "odom";
   }
 
   // CLEAR VISUALIZATION
@@ -65,6 +65,8 @@ class Visualize {
   // PUBLISH THE COST FOR A 2D NODE TO RViz
   /// Publishes the minimum of the cost of all nodes in a 2D grid cell
   void publishNode2DCosts(Node2D* nodes, int width, int height);
+  /// Sets the map resolution for scaling visualization
+  void setMapResolution(float resolution) { mapResolution = resolution; }
 
  private:
   /// A handle to the ROS node
@@ -89,6 +91,8 @@ class Visualize {
   geometry_msgs::PoseArray poses3Dreverse;
   /// Array of poses describing 2D heuristic nodes
   geometry_msgs::PoseArray poses2D;
+  /// Map resolution for scaling visualization
+  float mapResolution = Constants::cellSize;
 
 };
 }

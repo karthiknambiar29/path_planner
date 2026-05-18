@@ -41,7 +41,7 @@ class Path {
     pubPathVehicles = n.advertise<visualization_msgs::MarkerArray>(pathVehicleTopic, 1);
 
     // CONFIGURE THE CONTAINER
-    path.header.frame_id = "path";
+    path.header.frame_id = "odom";
   }
 
   //  // __________
@@ -87,6 +87,10 @@ class Path {
   void publishPathNodes() { pubPathNodes.publish(pathNodes); }
   /// Publishes the vehicle along the path
   void publishPathVehicles() { pubPathVehicles.publish(pathVehicles); }
+   /// Sets the map resolution for scaling node positions
+   void setMapResolution(float resolution) { mapResolution = resolution; }
+   /// Sets the map origin for translating grid to world coordinates
+   void setMapOrigin(double originX, double originY) { mapOriginX = originX; mapOriginY = originY; }
 
  private:
   /// A handle to the ROS node
@@ -105,6 +109,11 @@ class Path {
   visualization_msgs::MarkerArray pathVehicles;
   /// Value that indicates that the path is smoothed/post processed
   bool smoothed = false;
+   /// Map resolution for scaling node positions
+   float mapResolution = Constants::cellSize;
+   /// Map origin for translating grid to world coordinates
+   double mapOriginX = 0.0;
+   double mapOriginY = 0.0;
 };
 }
 #endif // PATH_H

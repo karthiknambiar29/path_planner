@@ -52,7 +52,7 @@ class CollisionDetection {
 
     // 2D collision test
     if (t == 99) {
-      return !grid->data[node->getIdx()];
+      return grid->data[node->getIdx()] <= 0;
     }
 
     if (true) {

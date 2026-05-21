@@ -32,6 +32,7 @@ Planner::Planner() {
 
   subGoal = n.subscribe("/move_base_simple/goal", 1, &Planner::setGoal, this);
   subStart = n.subscribe("/initialpose", 1, &Planner::setStart, this);
+  subOdom = n.subscribe("/odom", 1, &Planner::setOdom, this);
 };
 
 //###################################################
@@ -96,15 +97,12 @@ void Planner::worldToGrid(double wx, double wy, float& gx, float& gy) const {
 }
 
 void Planner::updateStartFromOdom() {
-  if (!listener.canTransform("/odom", ros::Time(0), "/base_link", ros::Time(0), "/odom", nullptr)) {
+  if (!lastOdom) {
     validStart = false;
     return;
   }
 
-  listener.lookupTransform("/odom", "/base_link", ros::Time(0), transform);
-  start.pose.pose.position.x = transform.getOrigin().x();
-  start.pose.pose.position.y = transform.getOrigin().y();
-  tf::quaternionTFToMsg(transform.getRotation(), start.pose.pose.orientation);
+  start.pose.pose = lastOdom->pose.pose;
 
   float gridX = 0.0f;
   float gridY = 0.0f;
@@ -119,6 +117,10 @@ void Planner::updateStartFromOdom() {
     startN.header.stamp = ros::Time::now();
     pubStart.publish(startN);
   }
+}
+
+void Planner::setOdom(const nav_msgs::Odometry::ConstPtr& odom) {
+  lastOdom = odom;
 }
 
 void Planner::setMap(const nav_msgs::OccupancyGrid::Ptr map) {

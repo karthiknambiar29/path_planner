@@ -63,13 +63,11 @@ void Path::updatePath(const std::vector<Node3D>& nodePath) {
 // ADD SEGMENT
 void Path::addSegment(const Node3D& node) {
   geometry_msgs::PoseStamped vertex;
+  vertex.header = path.header;
   vertex.pose.position.x = node.getX() * mapResolution + mapOriginX;
   vertex.pose.position.y = node.getY() * mapResolution + mapOriginY;
   vertex.pose.position.z = 0;
-  vertex.pose.orientation.x = 0;
-  vertex.pose.orientation.y = 0;
-  vertex.pose.orientation.z = 0;
-  vertex.pose.orientation.w = 0;
+  vertex.pose.orientation = tf::createQuaternionMsgFromYaw(node.getT());
   path.poses.push_back(vertex);
 }
 

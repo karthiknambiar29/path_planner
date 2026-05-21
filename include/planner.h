@@ -6,8 +6,8 @@
 
 #include <ros/ros.h>
 #include <tf/transform_datatypes.h>
-#include <tf/transform_listener.h>
 #include <nav_msgs/OccupancyGrid.h>
+#include <nav_msgs/Odometry.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 
 #include "constants.h"
@@ -57,6 +57,10 @@ class Planner {
   */
   void setGoal(const geometry_msgs::PoseStamped::ConstPtr& goal);
 
+   /// setOdom
+   /// \param odom the current odometry pose
+   void setOdom(const nav_msgs::Odometry::ConstPtr& odom);
+
   /*!
      \brief The central function entry point making the necessary preparations to start the planning.
   */
@@ -82,10 +86,8 @@ class Planner {
   ros::Subscriber subGoal;
   /// A subscriber for receiving start updates
   ros::Subscriber subStart;
-  /// A listener that awaits transforms
-  tf::TransformListener listener;
-  /// A transform for moving start positions
-  tf::StampedTransform transform;
+   /// A subscriber for receiving odometry updates
+   ros::Subscriber subOdom;
   /// The path produced by the hybrid A* algorithm
   Path path;
   /// The smoother used for optimizing the path
@@ -109,6 +111,8 @@ class Planner {
    int mapDownsampleFactor = 1;
   /// The start pose set through RViz
   geometry_msgs::PoseWithCovarianceStamped start;
+   /// Latest odom pose for start updates
+   nav_msgs::Odometry::ConstPtr lastOdom;
   /// The goal pose set through RViz
   geometry_msgs::PoseStamped goal;
   /// Flags for allowing the planner to plan

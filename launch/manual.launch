@@ -4,5 +4,5 @@
     <param name="map_downsample_factor" value="1" />
     </node> 
  <!-- <node name="tf_broadcaster" pkg="hybrid_astar" type="tf_broadcaster" /> -->
- <node name="rviz" pkg="rviz" type="rviz" args="-d $(find hybrid_astar)/launch/config.rviz" />
+ <!-- <node name="rviz" pkg="rviz" type="rviz" args="-d $(find hybrid_astar)/launch/config.rviz" /> -->
 </launch>

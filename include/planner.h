@@ -9,6 +9,7 @@
 #include <nav_msgs/OccupancyGrid.h>
 #include <nav_msgs/Odometry.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
+#include <std_msgs/Bool.h>
 
 #include "constants.h"
 #include "helper.h"
@@ -57,6 +58,9 @@ class Planner {
   */
   void setGoal(const geometry_msgs::PoseStamped::ConstPtr& goal);
 
+   /// Stop planning when mission control requests stop
+   void setStop(const std_msgs::Bool::ConstPtr& stop);
+
    /// setOdom
    /// \param odom the current odometry pose
    void setOdom(const nav_msgs::Odometry::ConstPtr& odom);
@@ -88,6 +92,8 @@ class Planner {
   ros::Subscriber subStart;
    /// A subscriber for receiving odometry updates
    ros::Subscriber subOdom;
+   /// A subscriber for receiving stop requests
+   ros::Subscriber subStop;
   /// The path produced by the hybrid A* algorithm
   Path path;
   /// The smoother used for optimizing the path
@@ -119,6 +125,8 @@ class Planner {
   bool validStart = false;
   /// Flags for allowing the planner to plan
   bool validGoal = false;
+   /// Flag for stopping planning
+   bool stopRequested = false;
   /// A lookup table for configurations of the vehicle and their spatial occupancy enumeration
   Constants::config collisionLookup[Constants::headings * Constants::positions];
   /// A lookup of analytical solutions (Dubin's paths)

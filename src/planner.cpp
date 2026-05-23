@@ -33,6 +33,7 @@ Planner::Planner() {
   subGoal = n.subscribe("/move_base_simple/goal", 1, &Planner::setGoal, this);
   subStart = n.subscribe("/initialpose", 1, &Planner::setStart, this);
   subOdom = n.subscribe("/odom", 1, &Planner::setOdom, this);
+  subStop = n.subscribe("/mission_control/stop", 1, &Planner::setStop, this);
 };
 
 //###################################################
@@ -180,6 +181,9 @@ void Planner::setStart(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr&
 //                                    INITIALIZE GOAL
 //###################################################
 void Planner::setGoal(const geometry_msgs::PoseStamped::ConstPtr& end) {
+  if (stopRequested) {
+    return;
+  }
   // retrieving goal position
   float x = 0.0f;
   float y = 0.0f;
@@ -199,10 +203,17 @@ void Planner::setGoal(const geometry_msgs::PoseStamped::ConstPtr& end) {
   }
 }
 
+void Planner::setStop(const std_msgs::Bool::ConstPtr& stop) {
+  stopRequested = static_cast<bool>(stop->data);
+}
+
 //###################################################
 //                                      PLAN THE PATH
 //###################################################
 void Planner::plan() {
+  if (stopRequested) {
+    return;
+  }
   // if a start as well as goal are defined go ahead and plan
   if (validStart && validGoal) {
 

@@ -19,6 +19,10 @@ Planner::Planner() {
   // _________________
   // TOPICS TO PUBLISH
   pubStart = n.advertise<geometry_msgs::PoseStamped>("/move_base_simple/start", 1);
+  pubNoPath = n.advertise<std_msgs::Bool>("/path_planner/no_path", 1, true);
+  std_msgs::Bool noPathMsg;
+  noPathMsg.data = true;
+  pubNoPath.publish(noPathMsg);
 
   // ___________________
   // TOPICS TO SUBSCRIBE
@@ -317,6 +321,10 @@ void Planner::plan() {
     smoothedPath.publishPathVehicles();
     visualization.publishNode3DCosts(nodes3D, width, height, depth);
     visualization.publishNode2DCosts(nodes2D, width, height);
+
+    std_msgs::Bool noPathMsg;
+    noPathMsg.data = smoother.getPath().empty();
+    pubNoPath.publish(noPathMsg);
 
 
 

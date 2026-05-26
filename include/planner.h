@@ -94,6 +94,8 @@ class Planner {
    ros::Subscriber subOdom;
    /// A subscriber for receiving stop requests
    ros::Subscriber subStop;
+   /// Publisher for no-path status
+   ros::Publisher pubNoPath;
   /// The path produced by the hybrid A* algorithm
   Path path;
   /// The smoother used for optimizing the path

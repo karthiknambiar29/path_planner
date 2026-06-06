@@ -1,6 +1,7 @@
 #include "planner.h"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <new>
 
@@ -108,6 +109,10 @@ void Planner::updateStartFromOdom() {
   }
 
   start.pose.pose = lastOdom->pose.pose;
+  const double yaw = tf::getYaw(start.pose.pose.orientation);
+  const double forwardOffset = 1.7;
+  start.pose.pose.position.x += forwardOffset * std::cos(yaw);
+  start.pose.pose.position.y += forwardOffset * std::sin(yaw);
 
   float gridX = 0.0f;
   float gridY = 0.0f;

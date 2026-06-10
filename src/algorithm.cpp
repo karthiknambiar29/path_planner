@@ -37,7 +37,13 @@ Node3D* Algorithm::hybridAStar(Node3D& start,
                                CollisionDetection& configurationSpace,
                                float* dubinsLookup,
                                Visualize& visualization) {
+  const float startX = start.getX();
+  const float startY = start.getY();
+  const float freeRadius = 5.0f;   // meters or cells depending on your map representation
 
+  int collisionRejects = 0;
+  int offGridRejects = 0;
+  int closedRejects = 0;
   // PREDECESSOR AND SUCCESSOR INDEX
   int iPred, iSucc;
   float newG;
@@ -178,11 +184,55 @@ Node3D* Algorithm::hybridAStar(Node3D& start,
         for (int i = 0; i < dir; i++) {
           // create possible successor
           nSucc = nPred->createSuccessor(i);
+          
           // set index of the successor
           iSucc = nSucc->setIdx(width, height);
 
           // ensure successor is on grid and traversable
-          if (nSucc->isOnGrid(width, height) && configurationSpace.isTraversable(nSucc)) {
+          // if (nSucc->isOnGrid(width, height) && configurationSpace.isTraversable(nSucc)) {
+          bool onGrid =
+              nSucc->isOnGrid(width,height);
+
+          bool traversable =
+              false;
+
+          // if (onGrid)
+          // {
+          //     traversable =
+          //         configurationSpace.isTraversable(nSucc);
+          // }
+
+          if (onGrid)
+          {
+              const float dx = nSucc->getX() - startX;
+              const float dy = nSucc->getY() - startY;
+
+              const float dist =
+                  std::sqrt(dx * dx + dy * dy);
+
+              if (dist <= freeRadius)
+              {
+                  traversable = true;
+              }
+              else
+              {
+                  traversable =
+                      configurationSpace.isTraversable(nSucc);
+              }
+          }
+
+          if (!onGrid)
+          {
+              offGridRejects++;
+          }
+
+          if (onGrid && !traversable)
+          {
+              collisionRejects++;
+          }
+
+          if (onGrid && traversable)
+          {
 
             // ensure successor is not on closed list or it has the same index as the predecessor
             if (!nodes3D[iSucc].isClosed() || iPred == iSucc) {
@@ -224,8 +274,19 @@ Node3D* Algorithm::hybridAStar(Node3D& start,
     }
   }
 
-  if (O.empty()) {
-    return nullptr;
+  // if (O.empty()) {
+  //   return nullptr;
+  // }
+
+  if (O.empty())
+  {
+      ROS_ERROR_STREAM(
+          "Hybrid A* failed."
+          << " Iterations: " << iterations
+          << " Collision rejects: " << collisionRejects
+          << " Off-grid rejects: " << offGridRejects);
+
+      return nullptr;
   }
 
   return nullptr;

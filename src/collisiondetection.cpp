@@ -1,4 +1,5 @@
 #include "collisiondetection.h"
+#include <ros/console.h>
 
 using namespace HybridAStar;
 
@@ -25,11 +26,40 @@ bool CollisionDetection::configurationTest(float x, float y, float t) const {
 
     // make sure the configuration coordinates are actually on the grid
     if (cX >= 0 && (unsigned int)cX < grid->info.width && cY >= 0 && (unsigned int)cY < grid->info.height) {
-      if (grid->data[cY * grid->info.width + cX] > 0) {
-        return false;
+      // if (grid->data[cY * grid->info.width + cX] > 0) {
+      //   return false;
+      // }
+      if (grid->data[cY * grid->info.width + cX] > 0)
+      {
+          ROS_WARN_THROTTLE(
+              1.0,
+              "Collision at (%d, %d)",
+              cX,
+              cY);
+          return false;
       }
     }
   }
 
   return true;
+}
+
+void CollisionDetection::clearStartFootprint(float x, float y, float t) {
+  int X = (int)x;
+  int Y = (int)y;
+  int iX = (int)((x - (long)x) * Constants::positionResolution);
+  iX = iX > 0 ? iX : 0;
+  int iY = (int)((y - (long)y) * Constants::positionResolution);
+  iY = iY > 0 ? iY : 0;
+  int iT = (int)(t / Constants::deltaHeadingRad);
+  int idx = iY * Constants::positionResolution * Constants::headings + iX * Constants::headings + iT;
+
+  for (int i = 0; i < collisionLookup[idx].length; ++i) {
+    int cX = X + collisionLookup[idx].pos[i].x;
+    int cY = Y + collisionLookup[idx].pos[i].y;
+    if (cX >= 0 && (unsigned int)cX < grid->info.width &&
+        cY >= 0 && (unsigned int)cY < grid->info.height) {
+      grid->data[cY * grid->info.width + cX] = 0;  // mark free
+    }
+  }
 }

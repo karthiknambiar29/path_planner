@@ -58,9 +58,9 @@ static const bool twoD = true;
 /// [#] --- Limits the maximum search depth of the algorithm, possibly terminating without the solution
 static const int iterations = 30000;
 /// [m] --- Uniformly adds a padding around the vehicle
-static const double bloating = 0.8;
+static const double bloating = 0.0;
 /// [m] --- The width of the vehicle
-static const double width = 2.8 + 2 * bloating;
+static const double width = 3.2 + 2 * bloating;
 /// [m] --- The length of the vehicle
 static const double length = 3.6 + 2 * bloating;
 /// [m] --- The minimum turning radius of the vehicle

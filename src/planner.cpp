@@ -27,8 +27,11 @@ Planner::Planner() {
 
   // ___________________
   // TOPICS TO SUBSCRIBE
-  const std::string mapTopic = "/occupancy_grid_node/occupancy_grid_downsampled";
-  subMap = n.subscribe(mapTopic, 1, &Planner::setMap, this);
+  const std::string planningMapTopic = "/occupancy_grid_node/occupancy_grid_downsampled";
+  subPlanningMap = n.subscribe(planningMapTopic, 1, &Planner::setPlanningMap, this);
+
+  const std::string collisionMapTopic = "/occupancy_grid_node/occupancy_grid_downsampled_inflated";
+  subCollisionMap = n.subscribe(collisionMapTopic, 1, &Planner::setCollisionMap, this);
 
   n.param("map_downsample_factor", mapDownsampleFactor, 1);
   if (mapDownsampleFactor < 1) {
@@ -110,15 +113,23 @@ void Planner::updateStartFromOdom() {
 
   start.pose.pose = lastOdom->pose.pose;
   const double yaw = tf::getYaw(start.pose.pose.orientation);
-  const double forwardOffset = 1.7;
-  start.pose.pose.position.x += forwardOffset * std::cos(yaw);
-  start.pose.pose.position.y += forwardOffset * std::sin(yaw);
+  // const double forwardOffset = 1.7;
+  // start.pose.pose.position.x += forwardOffset * std::cos(yaw);
+  // start.pose.pose.position.y += forwardOffset * std::sin(yaw);
 
   float gridX = 0.0f;
   float gridY = 0.0f;
   worldToGrid(start.pose.pose.position.x, start.pose.pose.position.y, gridX, gridY);
-  validStart = (grid->info.height >= gridY && gridY >= 0 && grid->info.width >= gridX && gridX >= 0);
+  // validStart = (grid->info.height >= gridY && gridY >= 0 && grid->info.width >= gridX && gridX >= 0);
+  if (!planningGrid) {
+    validStart = false;
+    return;
+  }
 
+  validStart = (planningGrid->info.height >= gridY &&
+                gridY >= 0 &&
+                planningGrid->info.width >= gridX &&
+                gridX >= 0);
   if (validStart) {
     geometry_msgs::PoseStamped startN;
     startN.pose.position = start.pose.pose.position;
@@ -133,34 +144,64 @@ void Planner::setOdom(const nav_msgs::Odometry::ConstPtr& odom) {
   lastOdom = odom;
 }
 
-void Planner::setMap(const nav_msgs::OccupancyGrid::Ptr map) {
+void Planner::setCollisionMap(
+    const nav_msgs::OccupancyGrid::Ptr map)
+{
+    collisionGrid = map;
+
+    configurationSpace.updateGrid(collisionGrid);
+
+    if (validStart && validGoal &&
+        planningGrid != nullptr &&
+        collisionGrid != nullptr)
+    {
+        plan();
+    }
+}
+
+// void Planner::setCollisionMap(const nav_msgs::OccupancyGrid::Ptr map)
+// {
+//   collisionGrid = map;
+
+//   configurationSpace.updateGrid(collisionGrid);
+
+//   if (validStart && validGoal && planningGrid && collisionGrid) {
+//     plan();
+//   }
+// }
+
+void Planner::setPlanningMap(const nav_msgs::OccupancyGrid::Ptr map)
+{
   if (Constants::coutDEBUG) {
-    std::cout << "I am seeing the map..." << std::endl;
+    std::cout << "I am seeing the planning map..." << std::endl;
   }
 
-  grid = map; // downsampleGrid(map, mapDownsampleFactor);
-  mapResolution = grid->info.resolution;
-  mapOriginX = grid->info.origin.position.x;
-  mapOriginY = grid->info.origin.position.y;
+  planningGrid = map;
+
+  mapResolution = planningGrid->info.resolution;
+  mapOriginX = planningGrid->info.origin.position.x;
+  mapOriginY = planningGrid->info.origin.position.y;
+
   path.setMapResolution(mapResolution);
   path.setMapOrigin(mapOriginX, mapOriginY);
+
   smoothedPath.setMapResolution(mapResolution);
   smoothedPath.setMapOrigin(mapOriginX, mapOriginY);
-  visualization.setMapResolution(mapResolution);
-  //update the configuration space with the current map
-  configurationSpace.updateGrid(grid);
-  //create array for Voronoi diagram
-//  ros::Time t0 = ros::Time::now();
-  int height = grid->info.height;
-  int width = grid->info.width;
-  bool** binMap;
-  binMap = new bool*[width];
 
-  for (int x = 0; x < width; x++) { binMap[x] = new bool[height]; }
+  visualization.setMapResolution(mapResolution);
+
+  int height = planningGrid->info.height;
+  int width  = planningGrid->info.width;
+
+  bool** binMap = new bool*[width];
+
+  for (int x = 0; x < width; x++) {
+    binMap[x] = new bool[height];
+  }
 
   for (int x = 0; x < width; ++x) {
     for (int y = 0; y < height; ++y) {
-      const int8_t cell = grid->data[y * width + x];
+      const int8_t cell = planningGrid->data[y * width + x];
       binMap[x][y] = (cell > 0);
     }
   }
@@ -168,15 +209,58 @@ void Planner::setMap(const nav_msgs::OccupancyGrid::Ptr map) {
   voronoiDiagram.initializeMap(width, height, binMap);
   voronoiDiagram.update();
   voronoiDiagram.visualize();
-//  ros::Time t1 = ros::Time::now();
-//  ros::Duration d(t1 - t0);
-//  std::cout << "created Voronoi Diagram in ms: " << d * 1000 << std::endl;
 
   updateStartFromOdom();
-  if (validStart && validGoal) {
+
+  if (validStart && validGoal && planningGrid && collisionGrid) {
     plan();
   }
 }
+
+// void Planner::setMap(const nav_msgs::OccupancyGrid::Ptr map) {
+//   if (Constants::coutDEBUG) {
+//     std::cout << "I am seeing the map..." << std::endl;
+//   }
+
+//   grid = map; // downsampleGrid(map, mapDownsampleFactor);
+//   mapResolution = grid->info.resolution;
+//   mapOriginX = grid->info.origin.position.x;
+//   mapOriginY = grid->info.origin.position.y;
+//   path.setMapResolution(mapResolution);
+//   path.setMapOrigin(mapOriginX, mapOriginY);
+//   smoothedPath.setMapResolution(mapResolution);
+//   smoothedPath.setMapOrigin(mapOriginX, mapOriginY);
+//   visualization.setMapResolution(mapResolution);
+//   //update the configuration space with the current map
+//   configurationSpace.updateGrid(grid);
+//   //create array for Voronoi diagram
+// //  ros::Time t0 = ros::Time::now();
+//   int height = grid->info.height;
+//   int width = grid->info.width;
+//   bool** binMap;
+//   binMap = new bool*[width];
+
+//   for (int x = 0; x < width; x++) { binMap[x] = new bool[height]; }
+
+//   for (int x = 0; x < width; ++x) {
+//     for (int y = 0; y < height; ++y) {
+//       const int8_t cell = grid->data[y * width + x];
+//       binMap[x][y] = (cell > 0);
+//     }
+//   }
+
+//   voronoiDiagram.initializeMap(width, height, binMap);
+//   voronoiDiagram.update();
+//   voronoiDiagram.visualize();
+// //  ros::Time t1 = ros::Time::now();
+// //  ros::Duration d(t1 - t0);
+// //  std::cout << "created Voronoi Diagram in ms: " << d * 1000 << std::endl;
+
+//   updateStartFromOdom();
+//   if (validStart && validGoal) {
+//     plan();
+//   }
+// }
 
 //###################################################
 //                                   INITIALIZE START
@@ -201,12 +285,29 @@ void Planner::setGoal(const geometry_msgs::PoseStamped::ConstPtr& end) {
 
   std::cout << "I am seeing a new goal x:" << x << " y:" << y << " t:" << Helper::toDeg(t) << std::endl;
 
-  if (grid->info.height >= y && y >= 0 && grid->info.width >= x && x >= 0) {
-    validGoal = true;
-    goal = *end;
+  if (!planningGrid) {
+    return;
+  }
 
-    if (Constants::manual) { plan();}
+  if (planningGrid->info.height >= y &&
+      y >= 0 &&
+      planningGrid->info.width >= x &&
+      x >= 0) {
+        validGoal = true;
+        goal = *end;
+      
 
+  // if (grid->info.height >= y && y >= 0 && grid->info.width >= x && x >= 0) {
+  //   validGoal = true;
+  //   goal = *end;
+
+    // if (Constants::manual) { plan();}
+    if (Constants::manual &&
+        planningGrid &&
+        collisionGrid)
+    {
+      plan();
+    }
   } else {
     std::cout << "invalid goal x:" << x << " y:" << y << " t:" << Helper::toDeg(t) << std::endl;
   }
@@ -220,6 +321,12 @@ void Planner::setStop(const std_msgs::Bool::ConstPtr& stop) {
 //                                      PLAN THE PATH
 //###################################################
 void Planner::plan() {
+  if (!planningGrid || !collisionGrid) {
+    std::cout << "Waiting for planning and collision maps"
+              << std::endl;
+    return;
+  }
+
   if (stopRequested) {
     return;
   }
@@ -228,8 +335,10 @@ void Planner::plan() {
 
     // ___________________________
     // LISTS ALLOWCATED ROW MAJOR ORDER
-    const int width = grid->info.width;
-    const int height = grid->info.height;
+    // const int width = grid->info.width;
+    // const int height = grid->info.height;
+    const int width = planningGrid->info.width;
+    const int height = planningGrid->info.height;
     const int depth = Constants::headings;
     if (width <= 0 || height <= 0) {
       std::cout << "invalid map size, width: " << width << " height: " << height << std::endl;
@@ -288,6 +397,10 @@ void Planner::plan() {
     // set theta to a value (0,2PI]
     t = Helper::normalizeHeadingRad(t);
     Node3D nStart(x, y, t, 0, 0, nullptr);
+
+    // force start node valid
+    nStart.open();
+    nStart.close();
     // ___________
     // DEBUG START
     //    Node3D nStart(108.291, 30.1081, 0, 0, 0, nullptr);
@@ -297,14 +410,102 @@ void Planner::plan() {
     // START AND TIME THE PLANNING
     ros::Time t0 = ros::Time::now();
 
+    ROS_INFO_STREAM(
+    "Planning from ("
+    << nStart.getX() << ", "
+    << nStart.getY() << ", "
+    << Helper::toDeg(nStart.getT()) << ") to ("
+    << nGoal.getX() << ", "
+    << nGoal.getY() << ", "
+    << Helper::toDeg(nGoal.getT()) << ")");
+
+    ROS_INFO_STREAM(
+        "Planning map size: "
+        << width << "x" << height);
+
+    ROS_INFO_STREAM(
+        "Planning map resolution: "
+        << mapResolution);
+
     // CLEAR THE VISUALIZATION
     visualization.clear();
     // CLEAR THE PATH
     path.clear();
     smoothedPath.clear();
+
+
+    // if (!configurationSpace.isTraversable(&nStart))
+    // {
+    //     ROS_ERROR("START POSE IS IN COLLISION");
+    // }
+    if (!configurationSpace.isTraversable(&nStart))
+    {
+        ROS_WARN("START POSE IS IN COLLISION — clearing start footprint");
+        configurationSpace.clearStartFootprint(nStart.getX(), nStart.getY(), nStart.getT());
+    }
+
+    // AFTER:
+    // if (!configurationSpace.isTraversable(&nStart))
+    // {
+    //     ROS_WARN("START POSE IS IN COLLISION — searching for nearest free pose...");
+
+    //     bool found = false;
+    //     // Search in expanding rings: 1 cell out, 2 cells out, ... up to maxRadius
+    //     const int maxRadius = 5; // tune this (in grid cells)
+    //     for (int r = 1; r <= maxRadius && !found; ++r)
+    //     {
+    //         for (int dx = -r; dx <= r && !found; ++dx)
+    //         {
+    //             for (int dy = -r; dy <= r && !found; ++dy)
+    //             {
+    //                 // only test the perimeter of each ring
+    //                 if (std::abs(dx) != r && std::abs(dy) != r) continue;
+
+    //                 Node3D candidate(nStart.getX() + dx,
+    //                                 nStart.getY() + dy,
+    //                                 nStart.getT(), 0, 0, nullptr);
+
+    //                 if (candidate.isOnGrid(width, height) &&
+    //                     configurationSpace.isTraversable(&candidate))
+    //                 {
+    //                     ROS_WARN("Shifted start by (%d, %d) cells to escape collision", dx, dy);
+    //                     nStart = candidate;
+    //                     found = true;
+    //                 }
+    //             }
+    //         }
+    //     }
+
+    //     if (!found)
+    //     {
+    //         ROS_ERROR("Could not find a free start pose within %d cells — aborting", maxRadius);
+    //         // delete[] nodes3D;
+    //         // delete[] nodes2D;
+    //         // return;
+    //     }
+    // }
+
+    if (!configurationSpace.isTraversable(&nGoal))
+    {
+        ROS_ERROR("GOAL POSE IS IN COLLISION");
+    }
     // FIND THE PATH
     Node3D* nSolution = Algorithm::hybridAStar(nStart, nGoal, nodes3D, nodes2D, width, height, configurationSpace, dubinsLookup, visualization);
     // TRACE THE PATH
+
+    if (nSolution == nullptr)
+    {
+        ROS_ERROR("Hybrid A* failed to find a path");
+
+        // std_msgs::Bool noPathMsg;
+        // noPathMsg.data = true;
+        // pubNoPath.publish(noPathMsg);
+
+        // delete[] nodes3D;
+        // delete[] nodes2D;
+
+        // return;
+    }
     smoother.tracePath(nSolution);
     // CREATE THE UPDATED PATH
     path.updatePath(smoother.getPath());

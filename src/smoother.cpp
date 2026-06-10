@@ -70,8 +70,18 @@ void Smoother::smoothPath(DynamicVoronoi& voronoi) {
       xi = xi + alpha * correction/totalWeight;
       newPath[i].setX(xi.getX());
       newPath[i].setY(xi.getY());
+      // Vector2D Dxi = xi - xim1;
+      // newPath[i - 1].setT(std::atan2(Dxi.getY(), Dxi.getX()));
+
       Vector2D Dxi = xi - xim1;
-      newPath[i - 1].setT(std::atan2(Dxi.getY(), Dxi.getX()));
+      float heading = std::atan2(Dxi.getY(), Dxi.getX());
+
+      // If this segment is a reverse primitive, flip the heading by π
+      // prim >= 3 means reverse in the Hybrid A* motion model
+      if (newPath[i - 1].getPrim() >= 3) {
+        heading = Helper::normalizeHeadingRad(heading + M_PI);
+      }
+      newPath[i - 1].setT(heading);
 
     }
 
@@ -81,9 +91,22 @@ void Smoother::smoothPath(DynamicVoronoi& voronoi) {
   path = newPath;
 }
 
+// void Smoother::tracePath(const Node3D* node, int i, std::vector<Node3D> path) {
+//   if (node == nullptr) {
+//     this->path = path;
+//     return;
+//   }
+
+//   i++;
+//   path.push_back(*node);
+//   tracePath(node->getPred(), i, path);
+// }
+
 void Smoother::tracePath(const Node3D* node, int i, std::vector<Node3D> path) {
   if (node == nullptr) {
     this->path = path;
+    // tracePath walks goal->start via predecessors, so reverse to get start->goal
+    std::reverse(this->path.begin(), this->path.end());
     return;
   }
 

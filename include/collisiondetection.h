@@ -63,6 +63,7 @@ class CollisionDetection {
 
     return cost <= 0;
   }
+  void clearStartFootprint(float x, float y, float t);
 
   /*!
      \brief Calculates the cost of the robot taking a specific configuration q int the World W

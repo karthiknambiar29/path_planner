@@ -44,8 +44,10 @@ class Planner {
      \brief Sets the map e.g. through a callback from a subscriber listening to map updates.
      \param map the map or occupancy grid
   */
-  void setMap(const nav_msgs::OccupancyGrid::Ptr map);
+//   void setMap(const nav_msgs::OccupancyGrid::Ptr map);
+   void setPlanningMap(const nav_msgs::OccupancyGrid::Ptr map);
 
+   void setCollisionMap(const nav_msgs::OccupancyGrid::Ptr map);
   /*!
      \brief setStart
      \param start the start pose
@@ -85,7 +87,10 @@ class Planner {
   /// A publisher publishing the start position for RViz
   ros::Publisher pubStart;
   /// A subscriber for receiving map updates
-  ros::Subscriber subMap;
+//   ros::Subscriber subMap;
+  ros::Subscriber subPlanningMap;
+  ros::Subscriber subCollisionMap;
+   /// A publisher for publishing the goal position for RViz
   /// A subscriber for receiving goal updates
   ros::Subscriber subGoal;
   /// A subscriber for receiving start updates
@@ -109,7 +114,9 @@ class Planner {
   /// The voronoi diagram
   DynamicVoronoi voronoiDiagram;
   /// A pointer to the grid the planner runs on
-  nav_msgs::OccupancyGrid::Ptr grid;
+//   nav_msgs::OccupancyGrid::Ptr grid;
+  nav_msgs::OccupancyGrid::Ptr planningGrid;
+  nav_msgs::OccupancyGrid::Ptr collisionGrid;
    /// Map resolution used to scale between world and grid coordinates
    float mapResolution = Constants::cellSize;
    /// Map origin in world coordinates
@@ -127,12 +134,20 @@ class Planner {
   bool validStart = false;
   /// Flags for allowing the planner to plan
   bool validGoal = false;
+
+  bool planningMapReceived = false;
+  bool collisionMapReceived = false;
    /// Flag for stopping planning
    bool stopRequested = false;
   /// A lookup table for configurations of the vehicle and their spatial occupancy enumeration
   Constants::config collisionLookup[Constants::headings * Constants::positions];
   /// A lookup of analytical solutions (Dubin's paths)
   float* dubinsLookup = new float [Constants::headings * Constants::headings * Constants::dubinsWidth * Constants::dubinsWidth];
+
+//   bool mapsReady() const {
+//   return planningGrid != nullptr &&
+//          collisionGrid != nullptr;
+// }
 };
 }
 #endif // PLANNER_H

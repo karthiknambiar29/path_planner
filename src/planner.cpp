@@ -497,9 +497,9 @@ void Planner::plan() {
     {
         ROS_ERROR("Hybrid A* failed to find a path");
 
-        // std_msgs::Bool noPathMsg;
-        // noPathMsg.data = true;
-        // pubNoPath.publish(noPathMsg);
+        std_msgs::Bool noPathMsg;
+        noPathMsg.data = true;
+        pubNoPath.publish(noPathMsg);
 
         // delete[] nodes3D;
         // delete[] nodes2D;
